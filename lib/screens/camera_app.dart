@@ -9,6 +9,7 @@ import 'package:demo_app/service/detection_result.dart';
 import 'package:demo_app/service/detection_service.dart';
 import 'package:external_path/external_path.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_vision/flutter_vision.dart';
 // import 'package:flutter_vision/flutter_vision.dart';
 import 'package:gap/gap.dart';
 import 'package:media_scanner/media_scanner.dart';
@@ -22,7 +23,7 @@ class CameraApp extends StatefulWidget {
 }
 
 class _CameraAppState extends State<CameraApp> {
-  // late FlutterVision _vision;
+  late FlutterVision _vision;
 
   late CameraController cameraController;
   late Future<void> cameraValue;
@@ -33,7 +34,7 @@ class _CameraAppState extends State<CameraApp> {
   late CameraImage cameraImage;
 
   DetectionResult? detectionResult;
-  // List<Map<String, dynamic>> yoloResults = [];
+  List<Map<String, dynamic>> yoloResults = [];
 
   Future<File> saveImage(XFile image) async {
     final downloadPath = await ExternalPath.getExternalStoragePublicDirectory(
@@ -101,31 +102,31 @@ class _CameraAppState extends State<CameraApp> {
     });
   }
 
-  // Future<void> _initializeVision() async {
-  //   _vision = FlutterVision();
-  //   int optimalThreadCount = getOptimalThreadCount();
-  //   debugPrint("optimalThreadCount: $optimalThreadCount");
+  Future<void> _initializeVision() async {
+    _vision = FlutterVision();
+    int optimalThreadCount = getOptimalThreadCount();
+    debugPrint("optimalThreadCount: $optimalThreadCount");
 
-  //   await _vision.loadYoloModel(
-  //     labels: 'assets/models/labels.txt',
-  //     modelPath: 'assets/models/best_float32.tflite',
-  //     modelVersion: 'yolov8',
-  //     numThreads: optimalThreadCount,
-  //     useGpu: false,
-  //   );
-  // }
+    await _vision.loadYoloModel(
+      labels: 'assets/models/labels.txt',
+      modelPath: 'assets/models/vehicle_detect_best_float16.tflite',
+      modelVersion: 'yolov8',
+      numThreads: optimalThreadCount,
+      useGpu: false,
+    );
+  }
 
   @override
   void initState() {
     super.initState();
     startCamera(0);
-    // _initializeVision();
+    _initializeVision();
   }
 
   @override
   void dispose() {
     cameraController.dispose();
-    // _vision.closeYoloModel();
+    _vision.closeYoloModel();
     super.dispose();
   }
 
@@ -180,8 +181,10 @@ class _CameraAppState extends State<CameraApp> {
           ),
           // if (yoloResults.isNotEmpty)
           //   CustomPaint(
-          //     painter: ObjectDetectionPainter(
+          //     painter: ObjectPainter(
           //         yoloResults,
+          //         cameraController.value.previewSize!.width,
+          //         cameraController.value.previewSize!.height,
           //         Size(
           //           cameraController.value.previewSize!.width,
           //           cameraController.value.previewSize!.height,
@@ -323,10 +326,10 @@ class _CameraAppState extends State<CameraApp> {
     );
   }
 
-  // int getOptimalThreadCount() {
-  //   int processorCount = Platform.numberOfProcessors;
-  //   return max(1, processorCount ~/ 2);
-  // }
+  int getOptimalThreadCount() {
+    int processorCount = Platform.numberOfProcessors;
+    return max(1, processorCount ~/ 2);
+  }
 
   void objectDetector(CameraImage image) async {
     if (_isDetecting) return;
@@ -334,57 +337,88 @@ class _CameraAppState extends State<CameraApp> {
     try {
       // var result = await DetectionService.detectAndOcr(image);
 
-      // final result = await _vision.yoloOnFrame(
-      //   bytesList: image.planes.map((plane) => plane.bytes).toList(),
-      //   imageHeight: image.height,
-      //   imageWidth: image.width,
-      //   iouThreshold: 0.4,
-      //   confThreshold: 0.4,
-      //   classThreshold: 0.5,
-      // );
+      final result = await _vision.yoloOnFrame(
+        bytesList: image.planes.map((plane) => plane.bytes).toList(),
+        imageHeight: image.height,
+        imageWidth: image.width,
+        iouThreshold: 0.4,
+        confThreshold: 0.4,
+        classThreshold: 0.5,
+      );
       if (mounted) {
         setState(() {
-          // yoloResults = result;
+          yoloResults = result;
           cameraImage = image;
         });
       }
-      // debugPrint('yoloResults is ${yoloResults.length}. Result: $result');
+      debugPrint('yoloResults is ${yoloResults.length}. Result: $result');
     } catch (e) {
       debugPrint("Error in object detection: $e");
     }
     _isDetecting = false;
   }
 
-  List<Widget> displayBoxesAroundRecognizedObjects(Size size) {
-    if (detectionResult == null) return [];
+  List<Widget> displayBoxesAroundRecognizedObjects(Size screen) {
+    if (yoloResults.isEmpty) return [];
+    double factorX = screen.width / (cameraImage?.height ?? 1);
+    double factorY = screen.height / (cameraImage?.width ?? 1);
 
-    return detectionResult!.nBoxesXyxy.asMap().entries.map((entry) {
-      final index = entry.key;
-      final box = entry.value;
-      final text = detectionResult?.ocrTexts[index] ?? "";
-      final conf = detectionResult?.ocrConfs[index] ?? 0;
+    Color colorPick = const Color.fromARGB(255, 50, 233, 30);
 
+    return yoloResults.map((result) {
+      debugPrint("to be drawn result: $result");
       return Positioned(
-        left: box[0] * size.width,
-        top: box[1] * size.height,
-        width: (box[2] - box[0]) * size.width,
-        height: (box[3] - box[1]) * size.height,
+        left: result["box"][0] * factorX,
+        top: result["box"][1] * factorY,
+        width: (result["box"][2] - result["box"][0]) * factorX,
+        height: (result["box"][3] - result["box"][1]) * factorY,
         child: Container(
           decoration: BoxDecoration(
-            border: Border.all(color: Colors.red, width: 2),
+            borderRadius: const BorderRadius.all(Radius.circular(10.0)),
+            border: Border.all(color: Colors.pink, width: 2.0),
           ),
           child: Text(
-            '$text (${conf.toStringAsFixed(2)})',
-            style: const TextStyle(
-              color: Colors.red,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
+            "${result['tag']} ${(result['box'][4] * 100).toStringAsFixed(0)}%",
+            style: TextStyle(
+              background: Paint()..color = colorPick,
+              color: Colors.white,
+              fontSize: 18.0,
             ),
           ),
         ),
       );
     }).toList();
   }
+  // List<Widget> displayBoxesAroundRecognizedObjects(Size size) {
+  //   if (detectionResult == null) return [];
+
+  //   return detectionResult!.nBoxesXyxy.asMap().entries.map((entry) {
+  //     final index = entry.key;
+  //     final box = entry.value;
+  //     final text = detectionResult?.ocrTexts[index] ?? "";
+  //     final conf = detectionResult?.ocrConfs[index] ?? 0;
+
+  //     return Positioned(
+  //       left: box[0] * size.width,
+  //       top: box[1] * size.height,
+  //       width: (box[2] - box[0]) * size.width,
+  //       height: (box[3] - box[1]) * size.height,
+  //       child: Container(
+  //         decoration: BoxDecoration(
+  //           border: Border.all(color: Colors.red, width: 2),
+  //         ),
+  //         child: Text(
+  //           '$text (${conf.toStringAsFixed(2)})',
+  //           style: const TextStyle(
+  //             color: Colors.red,
+  //             fontSize: 16,
+  //             fontWeight: FontWeight.bold,
+  //           ),
+  //         ),
+  //       ),
+  //     );
+  //   }).toList();
+  // }
 }
 
 // class ObjectDetectionPainter extends CustomPainter {

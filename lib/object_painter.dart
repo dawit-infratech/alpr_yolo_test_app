@@ -6,12 +6,43 @@ class ObjectPainter extends CustomPainter {
   final double previewWidth;
   final double previewHeight;
   final Size screenSize;
+  // final List<Map<String, dynamic>> yoloResults;
 
   ObjectPainter(
-      this.detections, this.previewWidth, this.previewHeight, this.screenSize);
+    this.detections,
+    this.previewWidth,
+    this.previewHeight,
+    this.screenSize,
+  );
 
   @override
   void paint(Canvas canvas, Size size) {
+    // double factorX = screenSize.width / (previewHeight ?? 1);
+    // double factorY = screenSize.height / (previewWidth ?? 1);
+
+    // Color colorPick = const Color.fromARGB(255, 50, 233, 30);
+    // return yoloResults.map((result) {
+    //   return Positioned(
+    //     left: result["box"][0] * factorX,
+    //     top: result["box"][1] * factorY,
+    //     width: (result["box"][2] - result["box"][0]) * factorX,
+    //     height: (result["box"][3] - result["box"][1]) * factorY,
+    //     child: Container(
+    //       decoration: BoxDecoration(
+    //         borderRadius: const BorderRadius.all(Radius.circular(10.0)),
+    //         border: Border.all(color: Colors.pink, width: 2.0),
+    //       ),
+    //       child: Text(
+    //         "${result['tag']} ${(result['box'][4] * 100).toStringAsFixed(0)}%",
+    //         style: TextStyle(
+    //           background: Paint()..color = colorPick,
+    //           color: Colors.white,
+    //           fontSize: 18.0,
+    //         ),
+    //       ),
+    //     ),
+    //   );
+    // }).toList();
     final double scaleX = screenSize.width / previewWidth;
     final double scaleY = screenSize.height / previewHeight;
 

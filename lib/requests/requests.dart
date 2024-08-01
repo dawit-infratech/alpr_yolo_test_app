@@ -6,10 +6,10 @@ import 'package:http/http.dart' as http;
 // final urlToUploadImage = Uri.parse('https://10.0.2.2/predict_image');
 
 // final urlToUploadImage = Uri.parse('http://127.0.0.1:8000/identify_svm');
-final base = 'https://bc15-169-150-218-58.ngrok-free.app';
+final base = 'https://81b6-196-190-62-161.ngrok-free.app';
 
 Future<Map<String, dynamic>> uploadImage(File image) async {
-  var url = Uri.parse(base + '/detect/');
+  var url = Uri.parse(base + '/file-read-plate/');
   var request = http.MultipartRequest('POST', url);
   var file = await http.MultipartFile.fromPath('file', image.path);
   request.files.add(file);
