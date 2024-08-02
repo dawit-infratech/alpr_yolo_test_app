@@ -109,7 +109,7 @@ class _CameraAppState extends State<CameraApp> {
 
     await _vision.loadYoloModel(
       labels: 'assets/models/labels.txt',
-      modelPath: 'assets/models/vehicle_detect_best_float16.tflite',
+      modelPath: 'assets/models/vehicle_detect_best_int8_128.tflite',
       modelVersion: 'yolov8',
       numThreads: optimalThreadCount,
       useGpu: false,
@@ -360,8 +360,8 @@ class _CameraAppState extends State<CameraApp> {
 
   List<Widget> displayBoxesAroundRecognizedObjects(Size screen) {
     if (yoloResults.isEmpty) return [];
-    double factorX = screen.width / (cameraImage?.height ?? 1);
-    double factorY = screen.height / (cameraImage?.width ?? 1);
+    double factorX = screen.width / (cameraImage.height ?? 1);
+    double factorY = screen.height / (cameraImage.width ?? 1);
 
     Color colorPick = const Color.fromARGB(255, 50, 233, 30);
 
