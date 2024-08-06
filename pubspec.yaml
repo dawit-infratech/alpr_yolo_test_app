@@ -48,6 +48,7 @@ dependencies:
   media_scanner: ^2.1.0
   flutter_vision: ^1.1.4
   get: ^4.6.6
+  flutter_speed_dial: ^7.0.0
 
 dev_dependencies:
   flutter_test:

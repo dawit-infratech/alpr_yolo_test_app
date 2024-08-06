@@ -2,17 +2,20 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:camera/camera.dart';
-import 'package:demo_app/object_painter.dart';
-import 'package:demo_app/requests/requests.dart';
-import 'package:demo_app/screens/show_image.dart';
+import 'package:demo_app/detect_on_image.dart';
+import 'package:demo_app/detect_on_video.dart';
+
 import 'package:demo_app/service/detection_result.dart';
-import 'package:demo_app/service/detection_service.dart';
+// import 'package:demo_app/service/detection_service.dart';
 import 'package:external_path/external_path.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_speed_dial/flutter_speed_dial.dart';
 import 'package:flutter_vision/flutter_vision.dart';
 // import 'package:flutter_vision/flutter_vision.dart';
 import 'package:gap/gap.dart';
 import 'package:media_scanner/media_scanner.dart';
+
+enum Options { none, image, frame, vision }
 
 class CameraApp extends StatefulWidget {
   final List<CameraDescription> cameras;
@@ -24,6 +27,7 @@ class CameraApp extends StatefulWidget {
 
 class _CameraAppState extends State<CameraApp> {
   late FlutterVision _vision;
+  Options option = Options.none;
 
   late CameraController cameraController;
   late Future<void> cameraValue;
@@ -38,18 +42,19 @@ class _CameraAppState extends State<CameraApp> {
 
   Future<File> saveImage(XFile image) async {
     final downloadPath = await ExternalPath.getExternalStoragePublicDirectory(
-        ExternalPath.DIRECTORY_DOWNLOADS);
+        ExternalPath.DIRECTORY_PICTURES);
     final fileName = '${DateTime.now().millisecondsSinceEpoch}.png';
     final file = File('$downloadPath/$fileName');
 
     try {
+      debugPrint("saving on imagePath: ${image.path}");
       await file.writeAsBytes(await image.readAsBytes());
-      var result = await DetectionService.detectAndOcr(file);
-      setState(() {
-        detectionResult = result;
-        debugPrint(
-            "result: boxesXyxy: ${result.boxesXyxy}, ocrTexts: ${result.ocrTexts}, ocrConfs: ${result.ocrConfs}");
-      });
+      // var result = await DetectionService.detectAndOcr(file);
+      // setState(() {
+      //   detectionResult = result;
+      //   debugPrint(
+      //       "result: boxesXyxy: ${result.boxesXyxy}, ocrTexts: ${result.ocrTexts}, ocrConfs: ${result.ocrConfs}");
+      // });
     } catch (error) {
       debugPrint("error: $error");
     }
@@ -131,8 +136,83 @@ class _CameraAppState extends State<CameraApp> {
     super.dispose();
   }
 
-  @override
   Widget build(BuildContext context) {
+    return Scaffold(
+      body: task(option, context),
+      floatingActionButton: SpeedDial(
+        //margin bottom
+        icon: Icons.open_in_new, //icon on Floating action button
+        activeIcon: Icons.close, //icon when menu is expanded on button
+        backgroundColor: Colors.deepOrangeAccent, //background color of button
+        foregroundColor: Colors.white, //font color, icon color in button
+        activeBackgroundColor:
+            Colors.deepPurpleAccent, //background color when menu is expanded
+        activeForegroundColor: Colors.white,
+        visible: true,
+        closeManually: false,
+        curve: Curves.bounceIn,
+        overlayColor: Colors.black,
+        overlayOpacity: 0.5,
+        buttonSize: const Size(56.0, 56.0),
+        children: [
+          SpeedDialChild(
+            //speed dial child
+            child: const Icon(Icons.camera),
+            backgroundColor: Colors.red,
+            foregroundColor: Colors.white,
+            label: 'From Camera',
+            labelStyle: const TextStyle(fontSize: 18.0),
+            onTap: () {
+              setState(() {
+                option = Options.none;
+              });
+            },
+          ),
+          SpeedDialChild(
+            //speed dial child
+            child: const Icon(Icons.video_call),
+            backgroundColor: Colors.red,
+            foregroundColor: Colors.white,
+            label: 'From Video',
+            labelStyle: const TextStyle(fontSize: 18.0),
+            onTap: () {
+              setState(() {
+                option = Options.frame;
+              });
+            },
+          ),
+          SpeedDialChild(
+            child: const Icon(Icons.image),
+            backgroundColor: Colors.blue,
+            foregroundColor: Colors.white,
+            label: 'From Gallery',
+            labelStyle: const TextStyle(fontSize: 18.0),
+            onTap: () {
+              setState(() {
+                option = Options.image;
+              });
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget task(Options option, BuildContext context) {
+    if (option == Options.frame) {
+      return DetectOnVideo(vision: _vision);
+    }
+
+    if (option == Options.image) {
+      return DetectOnImage(vision: _vision);
+    }
+
+    return cameraBody(context);
+
+    // return const Center(child: Text("Choose Task"));
+  }
+
+  Widget cameraBody(BuildContext context) {
     final size = MediaQuery.of(context).size;
     return Scaffold(
       floatingActionButton: FloatingActionButton(
@@ -141,11 +221,11 @@ class _CameraAppState extends State<CameraApp> {
         onPressed: () {
           takePicture().then((value) {
             if (value != null) {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) => ShowImage(
-                          imagePath: value, detectionResult: detectionResult)));
+              // Navigator.push(
+              //     context,
+              //     MaterialPageRoute(
+              //         builder: (context) => ShowImage(
+              //             imagePath: value, detectionResult: detectionResult)));
             }
           });
         },
@@ -157,22 +237,15 @@ class _CameraAppState extends State<CameraApp> {
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       body: Stack(
+        fit: StackFit.expand,
         children: [
           FutureBuilder(
             future: cameraValue,
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.done) {
-                return SizedBox(
-                  width: size.width,
-                  height: size.height,
-                  child: FittedBox(
-                    fit: BoxFit.cover,
-                    child: SizedBox(
-                      width: 100,
-                      child: CameraPreview(cameraController),
-                    ),
-                  ),
-                );
+                return AspectRatio(
+                    aspectRatio: cameraController.value.aspectRatio,
+                    child: CameraPreview(cameraController));
               } else {
                 return const Center(
                   child: CircularProgressIndicator(),
@@ -297,6 +370,167 @@ class _CameraAppState extends State<CameraApp> {
     );
   }
 
+  // @override
+  // Widget build(BuildContext context) {
+  //   final size = MediaQuery.of(context).size;
+  //   return Scaffold(
+  //     floatingActionButton: FloatingActionButton(
+  //       backgroundColor: const Color.fromRGBO(255, 255, 255, .7),
+  //       shape: const CircleBorder(),
+  //       onPressed: () {
+  //         takePicture().then((value) {
+  //           if (value != null) {
+  //             Navigator.push(
+  //                 context,
+  //                 MaterialPageRoute(
+  //                     builder: (context) => ShowImage(
+  //                         imagePath: value, detectionResult: detectionResult)));
+  //           }
+  //         });
+  //       },
+  //       child: const Icon(
+  //         Icons.camera_alt,
+  //         size: 40,
+  //         color: Colors.black87,
+  //       ),
+  //     ),
+  //     floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+  //     body: Stack(
+  //       fit: StackFit.expand,
+  //       children: [
+  //         FutureBuilder(
+  //           future: cameraValue,
+  //           builder: (context, snapshot) {
+  //             if (snapshot.connectionState == ConnectionState.done) {
+  //               return AspectRatio(
+  //                   aspectRatio: cameraController.value.aspectRatio,
+  //                   child: CameraPreview(cameraController));
+
+  //             } else {
+  //               return const Center(
+  //                 child: CircularProgressIndicator(),
+  //               );
+  //             }
+  //           },
+  //         ),
+  //         ...displayBoxesAroundRecognizedObjects(size),
+  //         SafeArea(
+  //           child: Align(
+  //             alignment: Alignment.topRight,
+  //             child: Padding(
+  //               padding: const EdgeInsets.only(right: 5, top: 10),
+  //               child: Column(
+  //                 mainAxisSize: MainAxisSize.min,
+  //                 children: [
+  //                   GestureDetector(
+  //                     onTap: () {
+  //                       setState(() {
+  //                         isFlashOn = !isFlashOn;
+  //                       });
+  //                     },
+  //                     child: Container(
+  //                       decoration: const BoxDecoration(
+  //                         color: Color.fromARGB(50, 0, 0, 0),
+  //                         shape: BoxShape.circle,
+  //                       ),
+  //                       child: Padding(
+  //                         padding: const EdgeInsets.all(10),
+  //                         child: isFlashOn
+  //                             ? const Icon(
+  //                                 Icons.flash_on,
+  //                                 color: Colors.white,
+  //                                 size: 30,
+  //                               )
+  //                             : const Icon(
+  //                                 Icons.flash_off,
+  //                                 color: Colors.white,
+  //                                 size: 30,
+  //                               ),
+  //                       ),
+  //                     ),
+  //                   ),
+  //                   const Gap(10),
+  //                   GestureDetector(
+  //                     onTap: () {
+  //                       setState(() {
+  //                         isRearCamera = !isRearCamera;
+  //                       });
+  //                       isRearCamera ? startCamera(0) : startCamera(1);
+  //                     },
+  //                     child: Container(
+  //                       decoration: const BoxDecoration(
+  //                         color: Color.fromARGB(50, 0, 0, 0),
+  //                         shape: BoxShape.circle,
+  //                       ),
+  //                       child: Padding(
+  //                         padding: const EdgeInsets.all(10),
+  //                         child: isRearCamera
+  //                             ? const Icon(
+  //                                 Icons.camera_rear,
+  //                                 color: Colors.white,
+  //                                 size: 30,
+  //                               )
+  //                             : const Icon(
+  //                                 Icons.camera_front,
+  //                                 color: Colors.white,
+  //                                 size: 30,
+  //                               ),
+  //                       ),
+  //                     ),
+  //                   )
+  //                 ],
+  //               ),
+  //             ),
+  //           ),
+  //         ),
+  //         Align(
+  //           alignment: Alignment.bottomLeft,
+  //           child: Column(
+  //             mainAxisSize: MainAxisSize.min,
+  //             children: [
+  //               SingleChildScrollView(
+  //                 scrollDirection: Axis.horizontal,
+  //                 child: Padding(
+  //                   padding: const EdgeInsets.only(left: 7, bottom: 75),
+  //                   child: Container(
+  //                     height: 100,
+  //                     decoration: BoxDecoration(
+  //                       borderRadius: BorderRadius.circular(10),
+  //                     ),
+  //                     child: ListView.builder(
+  //                       shrinkWrap: true,
+  //                       itemCount: imagesList.length,
+  //                       scrollDirection: Axis.horizontal,
+  //                       itemBuilder: (BuildContext context, int index) {
+  //                         return Padding(
+  //                           padding: const EdgeInsets.all(2),
+  //                           child: ClipRRect(
+  //                             borderRadius: BorderRadius.circular(10),
+  //                             child: Image(
+  //                               height: 100,
+  //                               width: 100,
+  //                               opacity: const AlwaysStoppedAnimation(0.7),
+  //                               image: FileImage(
+  //                                 File(imagesList[index].path),
+  //                               ),
+  //                               fit: BoxFit.cover,
+  //                             ),
+  //                           ),
+  //                         );
+  //                       },
+  //                     ),
+  //                   ),
+  //                 ),
+  //               )
+  //             ],
+  //           ),
+  //         ),
+  //       ],
+  //     ),
+  //   );
+
+  // }
+
   int getOptimalThreadCount() {
     int processorCount = Platform.numberOfProcessors;
     return max(1, processorCount ~/ 2);
@@ -360,83 +594,4 @@ class _CameraAppState extends State<CameraApp> {
       );
     }).toList();
   }
-  // List<Widget> displayBoxesAroundRecognizedObjects(Size size) {
-  //   if (detectionResult == null) return [];
-
-  //   return detectionResult!.nBoxesXyxy.asMap().entries.map((entry) {
-  //     final index = entry.key;
-  //     final box = entry.value;
-  //     final text = detectionResult?.ocrTexts[index] ?? "";
-  //     final conf = detectionResult?.ocrConfs[index] ?? 0;
-
-  //     return Positioned(
-  //       left: box[0] * size.width,
-  //       top: box[1] * size.height,
-  //       width: (box[2] - box[0]) * size.width,
-  //       height: (box[3] - box[1]) * size.height,
-  //       child: Container(
-  //         decoration: BoxDecoration(
-  //           border: Border.all(color: Colors.red, width: 2),
-  //         ),
-  //         child: Text(
-  //           '$text (${conf.toStringAsFixed(2)})',
-  //           style: const TextStyle(
-  //             color: Colors.red,
-  //             fontSize: 16,
-  //             fontWeight: FontWeight.bold,
-  //           ),
-  //         ),
-  //       ),
-  //     );
-  //   }).toList();
-  // }
 }
-
-// class ObjectDetectionPainter extends CustomPainter {
-//   final List<Map<String, dynamic>> detections;
-//   final Size imageSize;
-
-//   ObjectDetectionPainter(this.detections, this.imageSize);
-
-//   @override
-//   void paint(Canvas canvas, Size size) {
-//     // final Size imgSize = Size(width, height)
-//     final double scaleX = size.width / imageSize.width;
-//     final double scaleY = size.height / imageSize.height;
-
-//     final Paint paint = Paint()
-//       ..style = PaintingStyle.stroke
-//       ..strokeWidth = 2.0
-//       ..color = Colors.pink;
-
-//     for (var detection in detections) {
-//       final double left = detection["box"][0] * scaleX;
-//       final double top = detection["box"][1] * scaleY;
-//       final double right = detection["box"][2] * scaleX;
-//       final double bottom = detection["box"][3] * scaleY;
-
-//       canvas.drawRect(
-//         Rect.fromLTRB(left, top, right, bottom),
-//         paint,
-//       );
-
-//       TextPainter(
-//         text: TextSpan(
-//           text:
-//               "${detection['tag']} ${(detection['box'][4] * 100).toStringAsFixed(0)}%",
-//           style: TextStyle(
-//             color: Colors.white,
-//             fontSize: 12,
-//             backgroundColor: Colors.pink,
-//           ),
-//         ),
-//         textDirection: TextDirection.ltr,
-//       )
-//         ..layout()
-//         ..paint(canvas, Offset(left, top));
-//     }
-//   }
-
-//   @override
-//   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
-// }
