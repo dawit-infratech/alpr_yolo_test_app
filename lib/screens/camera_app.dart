@@ -5,9 +5,8 @@ import 'package:camera/camera.dart';
 import 'package:demo_app/detect_on_image.dart';
 import 'package:demo_app/detect_on_video.dart';
 
-import 'package:demo_app/screens/show_image.dart';
 import 'package:demo_app/service/detection_result.dart';
-import 'package:demo_app/service/detection_service.dart';
+// import 'package:demo_app/service/detection_service.dart';
 import 'package:external_path/external_path.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_speed_dial/flutter_speed_dial.dart';
@@ -43,18 +42,19 @@ class _CameraAppState extends State<CameraApp> {
 
   Future<File> saveImage(XFile image) async {
     final downloadPath = await ExternalPath.getExternalStoragePublicDirectory(
-        ExternalPath.DIRECTORY_DOWNLOADS);
+        ExternalPath.DIRECTORY_PICTURES);
     final fileName = '${DateTime.now().millisecondsSinceEpoch}.png';
     final file = File('$downloadPath/$fileName');
 
     try {
+      debugPrint("saving on imagePath: ${image.path}");
       await file.writeAsBytes(await image.readAsBytes());
-      var result = await DetectionService.detectAndOcr(file);
-      setState(() {
-        detectionResult = result;
-        debugPrint(
-            "result: boxesXyxy: ${result.boxesXyxy}, ocrTexts: ${result.ocrTexts}, ocrConfs: ${result.ocrConfs}");
-      });
+      // var result = await DetectionService.detectAndOcr(file);
+      // setState(() {
+      //   detectionResult = result;
+      //   debugPrint(
+      //       "result: boxesXyxy: ${result.boxesXyxy}, ocrTexts: ${result.ocrTexts}, ocrConfs: ${result.ocrConfs}");
+      // });
     } catch (error) {
       debugPrint("error: $error");
     }
@@ -220,11 +220,11 @@ class _CameraAppState extends State<CameraApp> {
         onPressed: () {
           takePicture().then((value) {
             if (value != null) {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) => ShowImage(
-                          imagePath: value, detectionResult: detectionResult)));
+              // Navigator.push(
+              //     context,
+              //     MaterialPageRoute(
+              //         builder: (context) => ShowImage(
+              //             imagePath: value, detectionResult: detectionResult)));
             }
           });
         },
