@@ -179,36 +179,6 @@ class _CameraAppState extends State<CameraApp> {
               }
             },
           ),
-          // if (yoloResults.isNotEmpty)
-          //   CustomPaint(
-          //     painter: ObjectPainter(
-          //         yoloResults,
-          //         cameraController.value.previewSize!.width,
-          //         cameraController.value.previewSize!.height,
-          //         Size(
-          //           cameraController.value.previewSize!.width,
-          //           cameraController.value.previewSize!.height,
-          //         )),
-          //     child: Container(),
-          //   ),
-          // if (yoloResults.isNotEmpty)
-          //   CustomPaint(
-          //     painter: ObjectPainter(
-          //       yoloResults,
-          //       cameraController.value.previewSize!.width.toDouble(),
-          //       cameraController.value.previewSize!.height.toDouble(),
-          //       size,
-          //     ),
-          //   ),
-
-          // if (yoloResults.isNotEmpty)
-          // CustomPaint(
-          // painter:
-          // ObjectPainter(yoloResults, cameraImage.width.toDouble(),
-          // cameraImage.height.toDouble(), size),
-          //   child:
-          //       Container(), // This ensures the CustomPaint covers the screen
-          // ),
           ...displayBoxesAroundRecognizedObjects(size),
           SafeArea(
             child: Align(
