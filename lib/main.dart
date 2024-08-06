@@ -251,6 +251,10 @@ class _YoloVideoState extends State<YoloVideo> {
     });
   }
 
+  // Timer? _emptyResultTimer;
+  DateTime? _lastNonEmptyResultTime;
+  Timer? _checkEmptyResultsTimer;
+
   Future<void> yoloOnFrame(CameraImage cameraImage) async {
     final result = await widget.vision.yoloOnFrame(
         bytesList: cameraImage.planes.map((plane) => plane.bytes).toList(),
@@ -259,14 +263,19 @@ class _YoloVideoState extends State<YoloVideo> {
         iouThreshold: 0.4,
         confThreshold: 0.4,
         classThreshold: 0.5);
+
     if (result.isNotEmpty) {
+      _lastNonEmptyResultTime = DateTime.now();
       setState(() {
         yoloResults = result;
       });
     } else {
-      setState(() {
-        yoloResults = [];
-      });
+      if (_lastNonEmptyResultTime != null &&
+          DateTime.now().difference(_lastNonEmptyResultTime!).inSeconds > 1) {
+        setState(() {
+          yoloResults = [];
+        });
+      }
     }
   }
 
