@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:camera/camera.dart';
 import 'package:demo_app/detect_on_image.dart';
 import 'package:demo_app/detect_on_video.dart';
+import 'package:demo_app/main.dart';
 
 import 'package:demo_app/service/detection_result.dart';
 // import 'package:demo_app/service/detection_service.dart';
@@ -95,7 +96,7 @@ class _CameraAppState extends State<CameraApp> {
   void startCamera(int camera) {
     cameraController = CameraController(
       widget.cameras[camera],
-      ResolutionPreset.max,
+      ResolutionPreset.medium,
       enableAudio: false,
     );
     cameraValue = cameraController.initialize().then((_) {
@@ -114,8 +115,11 @@ class _CameraAppState extends State<CameraApp> {
 
     await _vision.loadYoloModel(
       labels: 'assets/models/labels.txt',
-      modelPath: 'assets/models/vehicle_detect_best_int8_128.tflite',
+      // modelPath: 'assets/models/vehicle_detect_best_int8_128.tflite',
+      modelPath: 'assets/models/vehicle_detect_best_yolov8n_int8_128.tflite',
+
       modelVersion: 'yolov8',
+      quantization: true,
       numThreads: optimalThreadCount,
       useGpu: false,
     );
@@ -162,9 +166,13 @@ class _CameraAppState extends State<CameraApp> {
             label: 'From Camera',
             labelStyle: const TextStyle(fontSize: 18.0),
             onTap: () {
-              setState(() {
-                option = Options.none;
-              });
+              Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => MainApp(cameras: widget.cameras)));
+              // setState(() {
+              //   option = Options.none;
+              // });
             },
           ),
           SpeedDialChild(
@@ -369,167 +377,6 @@ class _CameraAppState extends State<CameraApp> {
     );
   }
 
-  // @override
-  // Widget build(BuildContext context) {
-  //   final size = MediaQuery.of(context).size;
-  //   return Scaffold(
-  //     floatingActionButton: FloatingActionButton(
-  //       backgroundColor: const Color.fromRGBO(255, 255, 255, .7),
-  //       shape: const CircleBorder(),
-  //       onPressed: () {
-  //         takePicture().then((value) {
-  //           if (value != null) {
-  //             Navigator.push(
-  //                 context,
-  //                 MaterialPageRoute(
-  //                     builder: (context) => ShowImage(
-  //                         imagePath: value, detectionResult: detectionResult)));
-  //           }
-  //         });
-  //       },
-  //       child: const Icon(
-  //         Icons.camera_alt,
-  //         size: 40,
-  //         color: Colors.black87,
-  //       ),
-  //     ),
-  //     floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-  //     body: Stack(
-  //       fit: StackFit.expand,
-  //       children: [
-  //         FutureBuilder(
-  //           future: cameraValue,
-  //           builder: (context, snapshot) {
-  //             if (snapshot.connectionState == ConnectionState.done) {
-  //               return AspectRatio(
-  //                   aspectRatio: cameraController.value.aspectRatio,
-  //                   child: CameraPreview(cameraController));
-
-  //             } else {
-  //               return const Center(
-  //                 child: CircularProgressIndicator(),
-  //               );
-  //             }
-  //           },
-  //         ),
-  //         ...displayBoxesAroundRecognizedObjects(size),
-  //         SafeArea(
-  //           child: Align(
-  //             alignment: Alignment.topRight,
-  //             child: Padding(
-  //               padding: const EdgeInsets.only(right: 5, top: 10),
-  //               child: Column(
-  //                 mainAxisSize: MainAxisSize.min,
-  //                 children: [
-  //                   GestureDetector(
-  //                     onTap: () {
-  //                       setState(() {
-  //                         isFlashOn = !isFlashOn;
-  //                       });
-  //                     },
-  //                     child: Container(
-  //                       decoration: const BoxDecoration(
-  //                         color: Color.fromARGB(50, 0, 0, 0),
-  //                         shape: BoxShape.circle,
-  //                       ),
-  //                       child: Padding(
-  //                         padding: const EdgeInsets.all(10),
-  //                         child: isFlashOn
-  //                             ? const Icon(
-  //                                 Icons.flash_on,
-  //                                 color: Colors.white,
-  //                                 size: 30,
-  //                               )
-  //                             : const Icon(
-  //                                 Icons.flash_off,
-  //                                 color: Colors.white,
-  //                                 size: 30,
-  //                               ),
-  //                       ),
-  //                     ),
-  //                   ),
-  //                   const Gap(10),
-  //                   GestureDetector(
-  //                     onTap: () {
-  //                       setState(() {
-  //                         isRearCamera = !isRearCamera;
-  //                       });
-  //                       isRearCamera ? startCamera(0) : startCamera(1);
-  //                     },
-  //                     child: Container(
-  //                       decoration: const BoxDecoration(
-  //                         color: Color.fromARGB(50, 0, 0, 0),
-  //                         shape: BoxShape.circle,
-  //                       ),
-  //                       child: Padding(
-  //                         padding: const EdgeInsets.all(10),
-  //                         child: isRearCamera
-  //                             ? const Icon(
-  //                                 Icons.camera_rear,
-  //                                 color: Colors.white,
-  //                                 size: 30,
-  //                               )
-  //                             : const Icon(
-  //                                 Icons.camera_front,
-  //                                 color: Colors.white,
-  //                                 size: 30,
-  //                               ),
-  //                       ),
-  //                     ),
-  //                   )
-  //                 ],
-  //               ),
-  //             ),
-  //           ),
-  //         ),
-  //         Align(
-  //           alignment: Alignment.bottomLeft,
-  //           child: Column(
-  //             mainAxisSize: MainAxisSize.min,
-  //             children: [
-  //               SingleChildScrollView(
-  //                 scrollDirection: Axis.horizontal,
-  //                 child: Padding(
-  //                   padding: const EdgeInsets.only(left: 7, bottom: 75),
-  //                   child: Container(
-  //                     height: 100,
-  //                     decoration: BoxDecoration(
-  //                       borderRadius: BorderRadius.circular(10),
-  //                     ),
-  //                     child: ListView.builder(
-  //                       shrinkWrap: true,
-  //                       itemCount: imagesList.length,
-  //                       scrollDirection: Axis.horizontal,
-  //                       itemBuilder: (BuildContext context, int index) {
-  //                         return Padding(
-  //                           padding: const EdgeInsets.all(2),
-  //                           child: ClipRRect(
-  //                             borderRadius: BorderRadius.circular(10),
-  //                             child: Image(
-  //                               height: 100,
-  //                               width: 100,
-  //                               opacity: const AlwaysStoppedAnimation(0.7),
-  //                               image: FileImage(
-  //                                 File(imagesList[index].path),
-  //                               ),
-  //                               fit: BoxFit.cover,
-  //                             ),
-  //                           ),
-  //                         );
-  //                       },
-  //                     ),
-  //                   ),
-  //                 ),
-  //               )
-  //             ],
-  //           ),
-  //         ),
-  //       ],
-  //     ),
-  //   );
-
-  // }
-
   int getOptimalThreadCount() {
     int processorCount = Platform.numberOfProcessors;
     return max(1, processorCount ~/ 2);
@@ -564,31 +411,62 @@ class _CameraAppState extends State<CameraApp> {
 
   List<Widget> displayBoxesAroundRecognizedObjects(Size screen) {
     if (yoloResults.isEmpty) return [];
-    double factorX = screen.width / (cameraImage.height ?? 1);
-    double factorY = screen.height / (cameraImage.width ?? 1);
 
-    Color colorPick = const Color.fromARGB(255, 50, 233, 30);
+    double factorX = screen.width / (cameraImage.height);
+    double factorY = screen.height / (cameraImage.width);
+
+    Color borderColor = const Color(0xFF2C3E50); // Dark blue-gray
+    Color labelBackgroundColor = const Color(0xFF34495E); // Lighter blue-gray
+    Color labelTextColor = Colors.white;
 
     return yoloResults.map((result) {
-      debugPrint("to be drawn result: $result");
+      double boxWidth = (result["box"][2] - result["box"][0]) * factorX;
+      double boxHeight = (result["box"][3] - result["box"][1]) * factorY;
+
+      bool isBoxTooSmall = boxWidth < 30 || boxHeight < 20;
+
       return Positioned(
         left: result["box"][0] * factorX,
         top: result["box"][1] * factorY,
-        width: (result["box"][2] - result["box"][0]) * factorX,
-        height: (result["box"][3] - result["box"][1]) * factorY,
+        width: boxWidth,
+        height: boxHeight,
         child: Container(
           decoration: BoxDecoration(
-            borderRadius: const BorderRadius.all(Radius.circular(10.0)),
-            border: Border.all(color: Colors.pink, width: 2.0),
+            borderRadius: BorderRadius.circular(4.0),
+            border: Border.all(color: borderColor, width: 2.0),
           ),
-          child: Text(
-            "${result['tag']} ${(result['box'][4] * 100).toStringAsFixed(0)}%",
-            style: TextStyle(
-              background: Paint()..color = colorPick,
-              color: Colors.white,
-              fontSize: 18.0,
-            ),
-          ),
+          child: isBoxTooSmall
+              ? null
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4.0, vertical: 1.0),
+                      decoration: BoxDecoration(
+                        color: labelBackgroundColor,
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(2.0),
+                          bottomRight: Radius.circular(2.0),
+                        ),
+                      ),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          "${result['tag']} ${(result['box'][4] * 100).toStringAsFixed(0)}%",
+                          style: TextStyle(
+                            color: labelTextColor,
+                            fontSize: 12.0,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
         ),
       );
     }).toList();
