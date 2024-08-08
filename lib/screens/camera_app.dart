@@ -7,6 +7,7 @@ import 'package:demo_app/detect_on_video.dart';
 import 'package:demo_app/main.dart';
 
 import 'package:demo_app/service/detection_result.dart';
+import 'package:demo_app/service/detection_service.dart';
 // import 'package:demo_app/service/detection_service.dart';
 import 'package:external_path/external_path.dart';
 import 'package:flutter/material.dart';
@@ -50,12 +51,11 @@ class _CameraAppState extends State<CameraApp> {
     try {
       debugPrint("saving on imagePath: ${image.path}");
       await file.writeAsBytes(await image.readAsBytes());
-      // var result = await DetectionService.detectAndOcr(file);
-      // setState(() {
-      //   detectionResult = result;
-      //   debugPrint(
-      //       "result: boxesXyxy: ${result.boxesXyxy}, ocrTexts: ${result.ocrTexts}, ocrConfs: ${result.ocrConfs}");
-      // });
+      var result = await DetectionService.detectAndReadFromFile(file);
+      setState(() {
+        detectionResult = result;
+        debugPrint("result: $result");
+      });
     } catch (error) {
       debugPrint("error: $error");
     }
@@ -386,8 +386,6 @@ class _CameraAppState extends State<CameraApp> {
     if (_isDetecting) return;
     _isDetecting = true;
     try {
-      // var result = await DetectionService.detectAndOcr(image);
-
       final result = await _vision.yoloOnFrame(
         bytesList: image.planes.map((plane) => plane.bytes).toList(),
         imageHeight: image.height,

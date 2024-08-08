@@ -131,7 +131,6 @@ class _DetectOnImageState extends State<DetectOnImage> {
 
     double pady = (screen.height - newHeight) / 2;
 
-    // Professional color scheme
     Color borderColor = const Color(0xFF2C3E50); // Dark blue-gray
     Color labelBackgroundColor = const Color(0xFF34495E); // Lighter blue-gray
     Color labelTextColor = Colors.white;

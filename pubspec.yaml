@@ -49,6 +49,7 @@ dependencies:
   flutter_vision: ^1.1.4
   get: ^4.6.6
   flutter_speed_dial: ^7.0.0
+  web_socket_channel: ^3.0.1
 
 dev_dependencies:
   flutter_test:

@@ -1,6 +1,12 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:camera/camera.dart';
+import 'package:demo_app/service/detection_result.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_vision/flutter_vision.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:image/image.dart' as img;
 
 late List<CameraDescription> cameras;
 
@@ -13,11 +19,15 @@ class DetectOnVideo extends StatefulWidget {
 }
 
 class _DetectOnVideoState extends State<DetectOnVideo> {
+  late WebSocketChannel _channel;
+
   late CameraController controller;
   late List<Map<String, dynamic>> yoloResults;
+  late List<DetectionResult> recognition_results;
   CameraImage? cameraImage;
   bool isLoaded = false;
   bool isDetecting = false;
+  bool isChannelConnected = false;
 
   @override
   void initState() {
@@ -26,23 +36,73 @@ class _DetectOnVideoState extends State<DetectOnVideo> {
   }
 
   init() async {
+    await connectSocket();
+
     cameras = await availableCameras();
+
     controller = CameraController(cameras[0], ResolutionPreset.medium);
     controller.initialize().then((value) {
       loadYoloModel().then((value) {
         setState(() {
           isLoaded = true;
           isDetecting = false;
+          isChannelConnected = true;
           yoloResults = [];
         });
       });
     });
   }
 
+  Future<void> connectSocket() async {
+    try {
+      _channel =
+          WebSocketChannel.connect(Uri.parse('ws://localhost:8000/live/'));
+      // await _channel.ready;
+      _channel.stream.listen(
+        (message) {
+          debugPrint("Received socket message: $message");
+          try {
+            final result = DetectionResult.fromJson(message);
+            setState(() {
+              recognition_results.add(result);
+            });
+          } catch (e) {
+            debugPrint("Failed to parse message: $e");
+          }
+        },
+        onDone: () {
+          debugPrint("WebSocket closed");
+          // setState(() {
+          //   isChannelConnected = false;
+          // });
+        },
+        onError: (error) {
+          debugPrint("WebSocket error: $error");
+          // setState(() {
+          //   isChannelConnected = false;
+          // });
+        },
+      );
+      // setState(() {
+      isChannelConnected = true;
+      debugPrint("Connected to WebSocket");
+      // });
+    } catch (e) {
+      debugPrint("Failed to connect to WebSocket: $e");
+      // setState(() {
+      //   isChannelConnected = false;
+      // });
+    }
+  }
+
   @override
   void dispose() async {
     super.dispose();
     controller.dispose();
+
+    if (isChannelConnected) {
+      _channel.sink.close();
+    }
   }
 
   @override
@@ -134,6 +194,15 @@ class _DetectOnVideoState extends State<DetectOnVideo> {
       setState(() {
         yoloResults = result;
       });
+      if (isChannelConnected) {
+        processImage(cameraImage);
+        // _channel.sink.add(jsonEncode({
+        //   'width': cameraImage.width,
+        //   'height': cameraImage.height,
+        //   'data': base64Encode(cameraImage.planes.first.bytes)
+        // }));
+        debugPrint("Sending image to websocket server");
+      }
     } else {
       if (_lastNonEmptyResultTime != null &&
           DateTime.now().difference(_lastNonEmptyResultTime!).inSeconds > 1) {
@@ -227,5 +296,58 @@ class _DetectOnVideoState extends State<DetectOnVideo> {
         ),
       );
     }).toList();
+  }
+
+  Future<void> processImage(CameraImage image) async {
+    final img.Image convertedImage = convertToImage(image);
+    final bytes = Uint8List.fromList(img.encodeJpg(convertedImage));
+
+    // final message = jsonEncode({
+    //   'width': image.width,
+    //   'height': image.height,
+    //   'data': base64Encode(bytes),
+    // });
+    if (isChannelConnected) {
+      _channel.sink.add(bytes);
+      debugPrint("Sent image data with dimensions");
+    }
+  }
+
+  img.Image convertToImage(CameraImage image) {
+    final int width = image.width;
+    final int height = image.height;
+    final img.Image imgImage = img.Image(width, height);
+
+    if (image.format.group == ImageFormatGroup.yuv420) {
+      final Plane planeY = image.planes[0];
+      final Plane planeU = image.planes[1];
+      final Plane planeV = image.planes[2];
+
+      final int uvRowStride = planeU.bytesPerRow;
+      final int uvPixelStride = planeU.bytesPerPixel!;
+
+      for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+          final int uvIndex = uvPixelStride * (x ~/ 2) + uvRowStride * (y ~/ 2);
+          final int index = y * width + x;
+
+          final int yp = planeY.bytes[index];
+          final int up = planeU.bytes[uvIndex];
+          final int vp = planeV.bytes[uvIndex];
+
+          int r = (yp + 1.402 * (vp - 128)).round();
+          int g = (yp - 0.344136 * (up - 128) - 0.714136 * (vp - 128)).round();
+          int b = (yp + 1.772 * (up - 128)).round();
+
+          r = r.clamp(0, 255);
+          g = g.clamp(0, 255);
+          b = b.clamp(0, 255);
+
+          imgImage.setPixel(x, y, img.getColor(r, g, b));
+        }
+      }
+    }
+
+    return imgImage;
   }
 }
