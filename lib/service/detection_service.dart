@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
-final base = 'https://192.168.0.111:8000';
+final base = 'http://localhost:8000';
 
 class DetectionService {
   static Future<DetectionResult> detectAndReadFromFile(File imageFile) async {

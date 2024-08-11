@@ -5,6 +5,7 @@ import 'package:camera/camera.dart';
 import 'package:demo_app/detect_on_image.dart';
 import 'package:demo_app/detect_on_video.dart';
 import 'package:demo_app/main.dart';
+import 'package:demo_app/screens/show_image.dart';
 
 import 'package:demo_app/service/detection_result.dart';
 import 'package:demo_app/service/detection_service.dart';
@@ -207,7 +208,7 @@ class _CameraAppState extends State<CameraApp> {
 
   Widget task(Options option, BuildContext context) {
     if (option == Options.frame) {
-      return DetectOnVideo(vision: _vision);
+      return LiveDetectOnVideo(vision: _vision);
     }
 
     if (option == Options.image) {
@@ -228,11 +229,11 @@ class _CameraAppState extends State<CameraApp> {
         onPressed: () {
           takePicture().then((value) {
             if (value != null) {
-              // Navigator.push(
-              //     context,
-              //     MaterialPageRoute(
-              //         builder: (context) => ShowImage(
-              //             imagePath: value, detectionResult: detectionResult)));
+              Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => ShowImage(
+                          imagePath: value, detectionResult: detectionResult)));
             }
           });
         },
