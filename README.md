@@ -1,6 +1,5 @@
 # demo_app
-
-A new Flutter project.
+ This is a demo app for InfraTech's ALPR project. It is a Flutter app that uses the flutter_vision package to detect vehicles in a camera feed and an API for live detection.
 
 ## Getting Started
 
