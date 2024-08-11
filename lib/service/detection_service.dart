@@ -4,10 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
-final base = 'https://81b6-196-190-62-161.ngrok-free.app';
+final base = 'http://localhost:8000';
 
 class DetectionService {
-  static Future<DetectionResult> detectAndOcr(File imageFile) async {
+  static Future<DetectionResult> detectAndReadFromFile(File imageFile) async {
     var uri = Uri.parse('$base/file-read-plate/');
     var request = http.MultipartRequest('POST', uri)
       ..files.add(await http.MultipartFile.fromPath('file', imageFile.path));

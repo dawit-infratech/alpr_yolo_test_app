@@ -81,7 +81,7 @@ class _DetectorState extends State<Detector> {
 
   Widget task(Options option) {
     if (option == Options.frame) {
-      return DetectOnVideo(vision: vision);
+      return LiveDetectOnVideo(vision: vision);
     }
 
     if (option == Options.image) {
