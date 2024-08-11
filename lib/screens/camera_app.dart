@@ -116,12 +116,15 @@ class _CameraAppState extends State<CameraApp> {
 
     await _vision.loadYoloModel(
       labels: 'assets/models/labels.txt',
+
       // modelPath: 'assets/models/vehicle_detect_best_int8_128.tflite',
       modelPath: 'assets/models/vehicle_detect_best_yolov8n_int8_128.tflite',
+
 
       modelVersion: 'yolov8',
       quantization: true,
       numThreads: optimalThreadCount,
+      quantization: true,
       useGpu: false,
     );
   }
