@@ -73,7 +73,7 @@ class _LiveDetectOnVideoState extends State<LiveDetectOnVideo> {
                 .toList();
             setState(() {
               recognitionResults = results;
-              if (listOfRecognitionCrops.length > 1) {
+              if (listOfRecognitionCrops.isNotEmpty) {
                 listOfRecognitionCrops.removeAt(0);
               }
             });
