@@ -1,5 +1,5 @@
-import 'package:demo_app/detect_on_image.dart';
-import 'package:demo_app/detect_on_video.dart';
+import 'package:demo_app/screens/detect_on_image.dart';
+import 'package:demo_app/screens/live_recognition_on_video.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_speed_dial/flutter_speed_dial.dart';
 import 'package:flutter_vision/flutter_vision.dart';
@@ -81,7 +81,7 @@ class _DetectorState extends State<Detector> {
 
   Widget task(Options option) {
     if (option == Options.frame) {
-      return LiveDetectOnVideo(vision: vision);
+      return LiveDetectOnVideo(vision: vision, cameras: cameras);
     }
 
     if (option == Options.image) {

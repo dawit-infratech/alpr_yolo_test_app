@@ -1,18 +1,18 @@
-class DetectionResult {
+class LPRResult {
   final List<double> boxConfs;
   final List<List<double>> boxesXyxy;
   final List<List<double>> normalizedBoxesXyxy;
-  final List<String> plate_numbers;
+  final List<String> plateNumbers;
 
-  DetectionResult({
+  LPRResult({
     required this.boxConfs,
     required this.boxesXyxy,
     required this.normalizedBoxesXyxy,
-    required this.plate_numbers,
+    required this.plateNumbers,
   });
 
-  factory DetectionResult.fromJson(Map<String, dynamic> json) {
-    return DetectionResult(
+  factory LPRResult.fromJson(Map<String, dynamic> json) {
+    return LPRResult(
       boxConfs: List<double>.from(json['box_confs']),
       boxesXyxy: (json['boxes_xyxy'] as List)
           .map((e) => List<double>.from(e))
@@ -20,7 +20,7 @@ class DetectionResult {
       normalizedBoxesXyxy: (json['normalized_boxes_xyxy'] as List)
           .map((e) => List<double>.from(e))
           .toList(),
-      plate_numbers: List<String>.from(json['plate_numbers']),
+      plateNumbers: List<String>.from(json['plate_numbers']),
     );
   }
 }

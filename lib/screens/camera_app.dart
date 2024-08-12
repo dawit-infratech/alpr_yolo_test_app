@@ -2,19 +2,19 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:camera/camera.dart';
-import 'package:demo_app/detect_on_image.dart';
-import 'package:demo_app/detect_on_video.dart';
+import 'package:demo_app/screens/detect_on_image.dart';
+import 'package:demo_app/screens/live_recognition_on_video.dart';
 import 'package:demo_app/main.dart';
 import 'package:demo_app/screens/show_image.dart';
 
-import 'package:demo_app/service/detection_result.dart';
-import 'package:demo_app/service/detection_service.dart';
-// import 'package:demo_app/service/detection_service.dart';
+import 'package:demo_app/services/models/lpr_result.dart';
+import 'package:demo_app/services/lpr_service.dart';
+
 import 'package:external_path/external_path.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_speed_dial/flutter_speed_dial.dart';
 import 'package:flutter_vision/flutter_vision.dart';
-// import 'package:flutter_vision/flutter_vision.dart';
+
 import 'package:gap/gap.dart';
 import 'package:media_scanner/media_scanner.dart';
 
@@ -40,72 +40,26 @@ class _CameraAppState extends State<CameraApp> {
   bool _isDetecting = false;
   late CameraImage cameraImage;
 
-  DetectionResult? detectionResult;
+  LPRResult? detectionResult;
   List<Map<String, dynamic>> yoloResults = [];
-
-  Future<File> saveImage(XFile image) async {
-    final downloadPath = await ExternalPath.getExternalStoragePublicDirectory(
-        ExternalPath.DIRECTORY_PICTURES);
-    final fileName = '${DateTime.now().millisecondsSinceEpoch}.png';
-    final file = File('$downloadPath/$fileName');
-
-    try {
-      debugPrint("saving on imagePath: ${image.path}");
-      await file.writeAsBytes(await image.readAsBytes());
-      var result = await DetectionService.detectAndReadFromFile(file);
-      setState(() {
-        detectionResult = result;
-        debugPrint("result: $result");
-      });
-    } catch (error) {
-      debugPrint("error: $error");
-    }
-
-    return file;
-  }
-
-  Future<String?> takePicture() async {
-    if (cameraController.value.isTakingPicture ||
-        !cameraController.value.isInitialized) {
-      return null;
-    }
-
-    if (isFlashOn == false) {
-      await cameraController.setFlashMode(FlashMode.off);
-    } else {
-      await cameraController.setFlashMode(FlashMode.torch);
-    }
-    final image = await cameraController.takePicture();
-
-    if (cameraController.value.flashMode == FlashMode.torch) {
-      setState(() {
-        cameraController.setFlashMode(FlashMode.off);
-      });
-    }
-
-    final file = await saveImage(image);
-    debugPrint("imagePath: ${file.path}");
-
-    setState(() {
-      imagesList.add(file);
-    });
-
-    MediaScanner.loadMedia(path: file.path);
-    return file.path;
-  }
 
   void startCamera(int camera) {
     cameraController = CameraController(
       widget.cameras[camera],
       ResolutionPreset.medium,
       enableAudio: false,
+
+      /// Adjust the resolution of the camera based on the device's capabilities. For low end devices, decreasing the
+      /// resolution gives a better performance. The more capable the device is, the higher the resolution can be set
+      /// without affecting the performance.
     );
     cameraValue = cameraController.initialize().then((_) {
       if (!mounted) {
         return;
       }
       setState(() {});
-      cameraController.startImageStream((image) => objectDetector(image));
+      cameraController.startImageStream(
+          (image) => objectDetector(image)); // Start image stream
     });
   }
 
@@ -116,14 +70,17 @@ class _CameraAppState extends State<CameraApp> {
 
     await _vision.loadYoloModel(
       labels: 'assets/models/labels.txt',
-      // modelPath: 'assets/models/vehicle_detect_best_int8_128.tflite',
       modelPath: 'assets/models/vehicle_detect_best_yolov8n_int8_128.tflite',
-
       modelVersion: 'yolov8',
       quantization: true,
       numThreads: optimalThreadCount,
       useGpu: false,
     );
+
+    /// Get the optimal number of threads with [getOptimalThreadCount] method
+    /// Set [useGpu] to true if the device can open a GPU delegate.
+    /// You can also set the [quantization] to false if you want the model to be more accurate in its detection. But this
+    /// might decrease the performance speed.
   }
 
   @override
@@ -140,75 +97,79 @@ class _CameraAppState extends State<CameraApp> {
     super.dispose();
   }
 
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: task(option, context),
-      floatingActionButton: SpeedDial(
-        //margin bottom
-        icon: Icons.open_in_new, //icon on Floating action button
-        activeIcon: Icons.close, //icon when menu is expanded on button
-        backgroundColor: Colors.deepOrangeAccent, //background color of button
-        foregroundColor: Colors.white, //font color, icon color in button
-        activeBackgroundColor:
-            Colors.deepPurpleAccent, //background color when menu is expanded
-        activeForegroundColor: Colors.white,
-        visible: true,
-        closeManually: false,
-        curve: Curves.bounceIn,
-        overlayColor: Colors.black,
-        overlayOpacity: 0.5,
-        buttonSize: const Size(56.0, 56.0),
-        children: [
-          SpeedDialChild(
-            //speed dial child
-            child: const Icon(Icons.camera),
-            backgroundColor: Colors.red,
-            foregroundColor: Colors.white,
-            label: 'From Camera',
-            labelStyle: const TextStyle(fontSize: 18.0),
-            onTap: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) => MainApp(cameras: widget.cameras)));
-              // setState(() {
-              //   option = Options.none;
-              // });
-            },
-          ),
-          SpeedDialChild(
-            //speed dial child
-            child: const Icon(Icons.video_call),
-            backgroundColor: Colors.red,
-            foregroundColor: Colors.white,
-            label: 'From Video',
-            labelStyle: const TextStyle(fontSize: 18.0),
-            onTap: () {
-              setState(() {
-                option = Options.frame;
-              });
-            },
-          ),
-          SpeedDialChild(
-            child: const Icon(Icons.image),
-            backgroundColor: Colors.blue,
-            foregroundColor: Colors.white,
-            label: 'From Gallery',
-            labelStyle: const TextStyle(fontSize: 18.0),
-            onTap: () {
-              setState(() {
-                option = Options.image;
-              });
-            },
-          ),
-        ],
-      ),
+      floatingActionButton: (option == Options.frame)
+          ? Container()
+          : SpeedDial(
+              //margin bottom
+              icon: Icons.open_in_new,
+              activeIcon: Icons.close,
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              activeBackgroundColor: Colors.deepPurpleAccent,
+              activeForegroundColor: Colors.white,
+              visible: true,
+              closeManually: false,
+              curve: Curves.bounceIn,
+              overlayColor: Colors.black,
+              overlayOpacity: 0.5,
+              buttonSize: const Size(56.0, 56.0),
+              children: [
+                if (option != Options.none && option != Options.vision)
+                  SpeedDialChild(
+                    //
+                    child: const Icon(Icons.camera),
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                    label: 'From Camera',
+                    labelStyle: const TextStyle(fontSize: 18.0),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) =>
+                                  MainApp(cameras: widget.cameras)));
+                      // setState(() {
+                      //   option = Options.none;
+                      // });
+                    },
+                  ),
+                SpeedDialChild(
+                  child: const Icon(Icons.video_call),
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                  label: 'Live Plate Recognition',
+                  labelStyle: const TextStyle(fontSize: 18.0),
+                  onTap: () {
+                    setState(() {
+                      option = Options.frame;
+                    });
+                  },
+                ),
+                if (option != Options.image)
+                  SpeedDialChild(
+                    child: const Icon(Icons.image),
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    label: 'From Gallery',
+                    labelStyle: const TextStyle(fontSize: 18.0),
+                    onTap: () {
+                      setState(() {
+                        option = Options.image;
+                      });
+                    },
+                  ),
+              ],
+            ),
     );
   }
 
   Widget task(Options option, BuildContext context) {
     if (option == Options.frame) {
-      return LiveDetectOnVideo(vision: _vision);
+      return LiveDetectOnVideo(vision: _vision, cameras: widget.cameras);
     }
 
     if (option == Options.image) {
@@ -261,7 +222,7 @@ class _CameraAppState extends State<CameraApp> {
               }
             },
           ),
-          ...displayBoxesAroundRecognizedObjects(size),
+          ...displayBoxesAroundRecognizedVehicles(size),
           SafeArea(
             child: Align(
               alignment: Alignment.topRight,
@@ -378,11 +339,13 @@ class _CameraAppState extends State<CameraApp> {
     );
   }
 
+  /// Function to get the optimal number of threads for the device
   int getOptimalThreadCount() {
     int processorCount = Platform.numberOfProcessors;
     return max(1, processorCount ~/ 2);
   }
 
+  /// The [objectDetector] function is used to process each frame of the camera from the stream
   void objectDetector(CameraImage image) async {
     if (_isDetecting) return;
     _isDetecting = true;
@@ -408,7 +371,7 @@ class _CameraAppState extends State<CameraApp> {
     _isDetecting = false;
   }
 
-  List<Widget> displayBoxesAroundRecognizedObjects(Size screen) {
+  List<Widget> displayBoxesAroundRecognizedVehicles(Size screen) {
     if (yoloResults.isEmpty) return [];
 
     double factorX = screen.width / (cameraImage.height);
@@ -469,5 +432,56 @@ class _CameraAppState extends State<CameraApp> {
         ),
       );
     }).toList();
+  }
+
+  Future<File> saveImage(XFile image) async {
+    final downloadPath = await ExternalPath.getExternalStoragePublicDirectory(
+        ExternalPath.DIRECTORY_PICTURES);
+    final fileName = '${DateTime.now().millisecondsSinceEpoch}.png';
+    final file = File('$downloadPath/$fileName');
+
+    try {
+      debugPrint("saving on imagePath: ${image.path}");
+      await file.writeAsBytes(await image.readAsBytes());
+      var result = await LPRService.detectAndReadFromFile(file);
+      setState(() {
+        detectionResult = result;
+        debugPrint("result: $result");
+      });
+    } catch (error) {
+      debugPrint("error: $error");
+    }
+
+    return file;
+  }
+
+  Future<String?> takePicture() async {
+    if (cameraController.value.isTakingPicture ||
+        !cameraController.value.isInitialized) {
+      return null;
+    }
+
+    if (isFlashOn == false) {
+      await cameraController.setFlashMode(FlashMode.off);
+    } else {
+      await cameraController.setFlashMode(FlashMode.torch);
+    }
+    final image = await cameraController.takePicture();
+
+    if (cameraController.value.flashMode == FlashMode.torch) {
+      setState(() {
+        cameraController.setFlashMode(FlashMode.off);
+      });
+    }
+
+    final file = await saveImage(image);
+    debugPrint("imagePath: ${file.path}");
+
+    setState(() {
+      imagesList.add(file);
+    });
+
+    MediaScanner.loadMedia(path: file.path);
+    return file.path;
   }
 }

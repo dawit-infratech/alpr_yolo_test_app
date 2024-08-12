@@ -3,39 +3,55 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
-import 'package:demo_app/service/detection_result.dart';
+import 'package:demo_app/main.dart';
+
+import 'package:demo_app/services/models/lpr_result.dart';
+import 'package:demo_app/services/socket_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_vision/flutter_vision.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:image/image.dart' as img;
 
 late List<CameraDescription> cameras;
 
 class LiveDetectOnVideo extends StatefulWidget {
   final FlutterVision vision;
-  const LiveDetectOnVideo({super.key, required this.vision});
+  final List<CameraDescription> cameras;
+
+  const LiveDetectOnVideo(
+      {super.key, required this.vision, required this.cameras});
 
   @override
   State<LiveDetectOnVideo> createState() => _LiveDetectOnVideoState();
 }
 
 class _LiveDetectOnVideoState extends State<LiveDetectOnVideo> {
-  late WebSocketChannel _channel;
+  late WebSocketManager _webSocketManager;
   late CameraController controller;
   CameraImage? cameraImage;
   bool isLoaded = false;
   bool isDetecting = false;
-  bool isChannelConnected = false;
+  bool _isSocketConnected = false;
 
-  List<Map<String, dynamic>> yoloResults = [];
-  List<DetectionResult> recognitionResults = [];
+  List<Map<String, dynamic>> yoloResults =
+      []; // holds vehicle detection results from yolo
+  List<LPRResult> recognitionResults =
+      []; // holds plate recognition results from socket
+
   List<List<List<int>>> listOfRecognitionCrops = [];
+
+  /// The [listOfRecognitionCrops] is a list of crop boxes around the detected plates
+  /// Each crop box is a list of [x, y, w, h] where [x, y] is the top left corner of the crop box
+  /// and [w, h] is the width and height of the crop box. The crop boxes are cropped from vehicle detection after the
+  /// results of the tflite [yolo model] on the original image and then later used to re-construct the License Plate
+  /// bounding boxes on build after the socket completes the recognition.
+  /// The crop boxes had to be stored in a separate than [yoloResults] because the socket is sending the crop boxes in a separate asynchronous order than the Yolo detection.
+  /// Then the [listOfRecognitionCrops] is systematically updated by removing value at index 0 whenever the socket completes another  recognition to add to the queue.
 
   StreamController<CameraImage> frameStreamController =
       StreamController<CameraImage>();
   StreamSubscription? frameSubscription;
 
-  // Frame rate control
+  /// Frame rate control, the target FPS is set to [5 fps] for now
   final int targetFPS = 5;
   int frameCount = 0;
   late DateTime lastFrameTime;
@@ -43,66 +59,54 @@ class _LiveDetectOnVideoState extends State<LiveDetectOnVideo> {
   @override
   void initState() {
     super.initState();
+    // connect to websocket on local server
+    // TODO: change to server url
+    _webSocketManager = WebSocketManager(
+      'ws://localhost:8000/live/',
+      onMessage: _handleSocketMessage,
+      onStateChange: _handleSocketStateChange,
+    );
+    _webSocketManager.connect();
     init();
   }
 
-  init() async {
-    await connectSocket();
-    cameras = await availableCameras();
-    controller = CameraController(cameras[0], ResolutionPreset.medium);
-    await controller.initialize();
-    await loadYoloModel();
-    setState(() {
-      isLoaded = true;
-      isDetecting = false;
-      isChannelConnected = true;
-    });
-    setupFrameProcessing();
-  }
-
-  Future<void> connectSocket() async {
+  void _handleSocketMessage(dynamic message) {
+    debugPrint("Received socket message: $message");
     try {
-      _channel =
-          WebSocketChannel.connect(Uri.parse('ws://localhost:8000/live/'));
-      _channel.stream.listen(
-        (message) {
-          debugPrint("Received socket message: $message");
-          try {
-            final results = (jsonDecode(message) as List)
-                .map((item) => DetectionResult.fromJson(item))
-                .toList();
-            setState(() {
-              recognitionResults = results;
-              if (listOfRecognitionCrops.isNotEmpty) {
-                listOfRecognitionCrops.removeAt(0);
-              }
-            });
-          } catch (e) {
-            debugPrint("Failed to parse message: $e");
-          }
-        },
-        onDone: () {
-          debugPrint("WebSocket closed");
-          setState(() {
-            isChannelConnected = false;
-          });
-        },
-        onError: (error) {
-          debugPrint("WebSocket error: $error");
-          setState(() {
-            isChannelConnected = false;
-          });
-        },
-      );
+      final results = (jsonDecode(message) as List)
+          .map((item) => LPRResult.fromJson(item))
+          .toList();
       setState(() {
-        isChannelConnected = true;
-        debugPrint("Connected to WebSocket");
+        recognitionResults = results;
+        if (listOfRecognitionCrops.isNotEmpty) {
+          /// remove the crop boxes at index 0 because, because they have already been used to draw boxes by the [displayBoxesAroundPlates] method
+          listOfRecognitionCrops.removeAt(0);
+        }
       });
     } catch (e) {
-      debugPrint("Failed to connect to WebSocket: $e");
+      debugPrint("Failed to parse message: $e");
+    }
+  }
+
+  void _handleSocketStateChange(SocketState state) {
+    setState(() {
+      _isSocketConnected = state == SocketState.connected;
+    });
+  }
+
+  Future<void> init() async {
+    try {
+      cameras = await availableCameras();
+      controller = CameraController(cameras[0], ResolutionPreset.medium);
+      await controller.initialize();
+      await loadYoloModel();
       setState(() {
-        isChannelConnected = false;
+        isLoaded = true;
+        isDetecting = false;
       });
+      setupFrameProcessing();
+    } catch (e) {
+      debugPrint("Error during initialization: $e");
     }
   }
 
@@ -115,6 +119,12 @@ class _LiveDetectOnVideoState extends State<LiveDetectOnVideo> {
       numThreads: 2,
       useGpu: false,
     );
+
+    /// Increase the number of threads if you have a powerful device. You can use the [getOptimalThreadCount] method
+    /// implementation from [camera_app.dart] to get the optimal number of threads for the device.
+    /// Also you can set the [useGpu] to true if the device can open a GPU delegate.
+    /// You can also set the [quantization] to false if you want the model to be more accurate in its detection. But this
+    /// might decrease the performance speed.
   }
 
   void setupFrameProcessing() {
@@ -140,12 +150,20 @@ class _LiveDetectOnVideoState extends State<LiveDetectOnVideo> {
       confThreshold: 0.4,
       classThreshold: 0.5,
     );
+
+    /// lower the value of the thresholds, [confThreshold], [iouThreshold] and [classThreshold] if you want to increase the number of vehicles detected. But this might decrease the performance speed as well as the accuracy of the detection.
+    /// Increase the values of the thresholds if you want to display the vehicles with higher confidence. But this will decrease the number of vehicles detected, resulting in an increase in false negatives.
     return result;
   }
 
+  /// The [sendFrameToWebSocket] function is used to send the frame to the server's socket.
+  /// To send the frame to the server,
+  /// 1, we only want to send the cropped images of the vehicles detected on the frame.
+  /// 2, the cropped images have to be encoded in base64 format.
+  /// 3, format to send the data to the server is a json of the form {"data": ["list of base64_encoded_images of the cropped vehicles detected on the frame"]}
   Future<void> sendFrameToWebSocket(
       CameraImage frame, List<Map<String, dynamic>> detections) async {
-    if (!isChannelConnected) return;
+    if (!_isSocketConnected) return;
 
     List<List<int>> cropBoxes = detections.map((r) {
       List<num> box = r["box"];
@@ -159,6 +177,7 @@ class _LiveDetectOnVideoState extends State<LiveDetectOnVideo> {
 
     List<String> imageStrings = [];
     for (List<int> cropBox in cropBoxes) {
+      // crop the image from the frame and convert it to a jpeg image then encode it to base64
       final img.Image convertedImage = convertToImage(frame, cropBox);
       Uint8List imageData = Uint8List.fromList(img.encodeJpg(convertedImage));
       String base64Image = base64Encode(imageData);
@@ -166,57 +185,122 @@ class _LiveDetectOnVideoState extends State<LiveDetectOnVideo> {
     }
 
     if (imageStrings.isNotEmpty) {
-      _channel.sink.add(jsonEncode({'data': imageStrings}));
+      _webSocketManager.send(jsonEncode({'data': imageStrings}));
       setState(() {
         listOfRecognitionCrops.add(cropBoxes);
+        // add the crop boxes to the list of crop boxes to later be used to draw the boxes on the screen
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (!_isSocketConnected && _webSocketManager.state == SocketState.error) {
+      return Scaffold(
+        floatingActionButtonLocation: FloatingActionButtonLocation.startTop,
+        floatingActionButton: FloatingActionButton(
+          onPressed: () {
+            Navigator.push(context, MaterialPageRoute(builder: (context) {
+              return MainApp(cameras: widget.cameras);
+            }));
+          },
+          backgroundColor: Colors.white,
+          child: const Icon(Icons.arrow_back_ios),
+        ),
+        body: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text("Connecting to server..."),
+              SizedBox(height: 20),
+              CircularProgressIndicator(),
+            ],
+          ),
+        ),
+      );
+    }
+
     final Size size = MediaQuery.of(context).size;
     if (!isLoaded) {
-      return const Scaffold(
-        body: Center(
+      return Scaffold(
+        floatingActionButtonLocation: FloatingActionButtonLocation.startTop,
+        floatingActionButton: FloatingActionButton(
+          onPressed: () {
+            Navigator.push(context, MaterialPageRoute(builder: (context) {
+              return MainApp(cameras: widget.cameras);
+            }));
+          },
+          backgroundColor: Colors.white,
+          child: const Icon(Icons.arrow_back_ios),
+        ),
+        body: const Center(
           child: Text("Model not loaded, waiting for it"),
         ),
       );
     }
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        AspectRatio(
-          aspectRatio: controller.value.aspectRatio,
-          child: CameraPreview(controller),
-        ),
-        ...displayBoxesAroundVehicles(size),
-        ...displayBoxesAroundPlates(size),
-        Positioned(
-          bottom: 75,
-          width: MediaQuery.of(context).size.width,
-          child: Container(
-            height: 80,
-            width: 80,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                width: 5,
-                color: Colors.white,
-                style: BorderStyle.solid,
+    return Scaffold(
+      floatingActionButtonLocation: FloatingActionButtonLocation.startTop,
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(context, MaterialPageRoute(builder: (context) {
+            return MainApp(cameras: widget.cameras);
+          }));
+        },
+        backgroundColor: Colors.white,
+        child: const Icon(Icons.arrow_back_ios),
+      ),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          AspectRatio(
+            aspectRatio: controller.value.aspectRatio,
+            child: CameraPreview(controller),
+          ),
+          ...displayBoxesAroundVehicles(size),
+          ...displayBoxesAroundPlates(size),
+          Positioned(
+            bottom: 20,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.black.withOpacity(0.5),
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        customBorder: const CircleBorder(),
+                        onTap: toggleDetection,
+                        child: Icon(
+                          isDetecting ? Icons.stop : Icons.play_arrow,
+                          color: isDetecting ? Colors.red : Colors.white,
+                          size: 40,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    isDetecting ? "Stop" : "Start",
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
               ),
-            ),
-            child: IconButton(
-              onPressed: toggleDetection,
-              icon: Icon(
-                isDetecting ? Icons.stop : Icons.play_arrow,
-                color: isDetecting ? Colors.red : Colors.white,
-              ),
-              iconSize: 50,
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -241,6 +325,8 @@ class _LiveDetectOnVideoState extends State<LiveDetectOnVideo> {
       frameCount = 0;
       lastFrameTime = DateTime.now();
     });
+
+    /// start the image stream from the camera and process the frames at a rate of [targetFPS]
     await controller.startImageStream((image) {
       if (isDetecting) {
         final now = DateTime.now();
@@ -269,15 +355,17 @@ class _LiveDetectOnVideoState extends State<LiveDetectOnVideo> {
     frameSubscription?.cancel();
     frameStreamController.close();
     controller.dispose();
-    if (isChannelConnected) {
-      _channel.sink.close();
-    }
+    _webSocketManager.dispose();
+    // if (socketHasNoErrors) {
+    //   _channel.sink.close();
+    // }
     super.dispose();
   }
 
+  /// The [displayBoxesAroundPlates] method displays the boxes around the detected plates on the screen along with their
+  /// plate number uses the [listOfRecognitionCrops] to draw the boxes around the detected plates. It draws the boxes by
+  /// picking the first crop box from the [listOfRecognitionCrops] and then drawing the boxes around the detected plates.
   List<Widget> displayBoxesAroundPlates(Size screen) {
-    // debugPrint("recognition saved: $recognition_results");
-
     if (listOfRecognitionCrops.isEmpty ||
         listOfRecognitionCrops.first.length != recognitionResults.length) {
       return [];
@@ -303,18 +391,19 @@ class _LiveDetectOnVideoState extends State<LiveDetectOnVideo> {
       final widgets = results.boxesXyxy.map((result) {
         List<int> cropBox = cropBoxes[cropBoxIdx];
 
-        String plate_number = results.plate_numbers[idx];
+        String plateNumber = results.plateNumbers[idx];
 
         // position calculations
         double boxWidth = (result[2] - result[0]) * factorX;
         double boxHeight = (result[3] - result[1]) * factorY;
         bool isBoxTooSmall = boxWidth < 30 || boxHeight < 20;
 
+        // use crop boxes prior to vehicle detection to update values
         double leftPosition = (result[0] + cropBox[0]) * factorX;
         double topPosition = (result[1] + cropBox[1]) * factorY;
 
         idx++;
-        // Increment index after accessing both [plate_numbers] and [boxConfs]
+        // Increment index after accessing the [PlateNumber] from [plateNumbers]
 
         return Positioned(
           left: leftPosition,
@@ -345,7 +434,10 @@ class _LiveDetectOnVideoState extends State<LiveDetectOnVideo> {
                         child: FittedBox(
                           fit: BoxFit.scaleDown,
                           child: Text(
-                            "$plate_number ${(results.boxConfs[idx - 1] * 100).toStringAsFixed(0)}%",
+                            "$plateNumber ",
+
+                            /// "${(results.boxConfs[idx - 1] * 100).toStringAsFixed(0)}%" You can use this to display the confidence of the license plate detection
+                            /// This confidence is not the confidence of the plate number recognition but the confidence of the license plate detection
                             style: TextStyle(
                               color: labelTextColor,
                               fontSize: 12.0,
@@ -432,15 +524,17 @@ class _LiveDetectOnVideoState extends State<LiveDetectOnVideo> {
     }).toList();
   }
 
-  img.Image convertToImage(CameraImage image, List<int>? cropBox) {
-    final int width = image.width;
-    final int height = image.height;
+  /// The [convertToImage] method converts the [CameraImage] to an [Image] object.
+  /// The [cropBox] is used to crop the the vehicles detected from the frame before converting it to an [Image] object.
+  img.Image convertToImage(CameraImage frame, List<int>? cropBox) {
+    final int width = frame.width;
+    final int height = frame.height;
     final img.Image imgImage = img.Image(width, height);
 
-    if (image.format.group == ImageFormatGroup.yuv420) {
-      final Plane planeY = image.planes[0];
-      final Plane planeU = image.planes[1];
-      final Plane planeV = image.planes[2];
+    if (frame.format.group == ImageFormatGroup.yuv420) {
+      final Plane planeY = frame.planes[0];
+      final Plane planeU = frame.planes[1];
+      final Plane planeV = frame.planes[2];
 
       final int uvRowStride = planeU.bytesPerRow;
       final int uvPixelStride = planeU.bytesPerPixel!;
@@ -467,36 +561,20 @@ class _LiveDetectOnVideoState extends State<LiveDetectOnVideo> {
       }
     }
 
-    // Rotate image based on orientation
+    /// I had to rotate the image by 90 degrees clockwise. I don't know why but it works.
+    /// It might be because the orientation of the camera but if I didn't rotate the image by 90 degrees clockwise, the
+    /// server wouldn't give the correct boxes, even though the server would still sending the right license plates.
     img.Image rotatedImage = img.copyRotate(imgImage, 90);
+
+    // Crop the image by the [cropBox]
     if (cropBox != null) {
       int x = cropBox[0];
       int y = cropBox[1];
       int w = cropBox[2];
       int h = cropBox[3];
 
-      // Crop image
       rotatedImage = img.copyCrop(rotatedImage, x, y, w, h);
     }
-    // switch (controller.value.lockedCaptureOrientation) {
-    //   case DeviceOrientation.portraitUp:
-    //     rotatedImage = img.copyRotate(imgImage, 90); // 90 degrees clockwise
-    //     break;
-    //   case DeviceOrientation.portraitDown:
-    //     rotatedImage =
-    //         img.copyRotate(imgImage, -90); // 90 degrees counter-clockwise
-    //     break;
-    //   case DeviceOrientation.landscapeLeft:
-    //     // rotatedImage = img.copyRotate(imgImage, 0); // No rotation needed
-    //     rotatedImage = imgImage;
-    //     break;
-    //   case DeviceOrientation.landscapeRight:
-    //     rotatedImage = img.copyRotate(imgImage, 180); // 180 degrees
-    //     break;
-    //   default:
-    //     rotatedImage = imgImage; // Default, no rotation
-    //     break;
-    // }
 
     return rotatedImage;
   }

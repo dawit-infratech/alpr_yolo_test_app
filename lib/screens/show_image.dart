@@ -1,4 +1,4 @@
-import 'package:demo_app/service/detection_result.dart';
+import 'package:demo_app/services/models/lpr_result.dart';
 import 'package:flutter/material.dart';
 import 'dart:io';
 
@@ -6,7 +6,7 @@ class ShowImage extends StatelessWidget {
   const ShowImage({super.key, required this.imagePath, this.detectionResult});
 
   final String imagePath;
-  final DetectionResult? detectionResult;
+  final LPRResult? detectionResult;
 
   @override
   Widget build(BuildContext context) {
@@ -44,7 +44,7 @@ class ShowImage extends StatelessWidget {
     int idx = 0;
 
     return detectionResult!.normalizedBoxesXyxy.map((result) {
-      String plate_number = detectionResult!.plate_numbers[idx];
+      String plate_number = detectionResult!.plateNumbers[idx];
       double boxWidth = (result[3] - result[1]) * factorX;
       double boxHeight = (result[2] - result[0]) * factorY;
       bool isBoxTooSmall = boxWidth < 30 || boxHeight < 20;
